@@ -1,0 +1,6 @@
+make --dry-run --keep-going --print-directory
+make: Entering directory '/mnt/c/Users/richa/OneDrive/Área de Trabalho/TP2_REDES'
+gcc  -Wall -Wextra -g  equipment.c -o ./equipment 
+gcc  -Wall -Wextra -g  -pthread server.c  -o ./server
+make: Leaving directory '/mnt/c/Users/richa/OneDrive/Área de Trabalho/TP2_REDES'
+ 
