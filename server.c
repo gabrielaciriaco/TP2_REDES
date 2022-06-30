@@ -11,11 +11,23 @@
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
+#include <pthread.h>
 
-#define MAX_CONNECTIONS 5
 #define MAX_MESSAGE_SIZE 500
+#define MAX_CONECTIONS 15
 
-int initializeServerSocket(const char* port, struct sockaddr** address) {
+int sockfd;
+int numberThreads = 0;
+
+void *ThreadMain(void *threadArgs);
+
+struct ThreadArgs {
+  socklen_t clientAdressSize;
+  struct sockaddr_in clientAdress;
+  char buffer[MAX_MESSAGE_SIZE];
+};
+
+int initializeServerSocket(const char *port, struct sockaddr **address) {
   int domain, addressSize, serverfd, yes = 1;
   struct sockaddr_in addressv4;
 
@@ -25,7 +37,7 @@ int initializeServerSocket(const char* port, struct sockaddr** address) {
 
   domain = AF_INET;
   addressSize = sizeof(addressv4);
-  *address = (struct sockaddr*)&addressv4;
+  *address = (struct sockaddr *)&addressv4;
 
   if ((serverfd = socket(domain, SOCK_DGRAM, IPPROTO_UDP)) == 0) {
     perror("Could not create socket");
@@ -46,38 +58,49 @@ int initializeServerSocket(const char* port, struct sockaddr** address) {
   return serverfd;
 }
 
-int main(int argc, char const* argv[]) {
+void *ThreadMain(void *threadArgs) {
+  struct ThreadArgs *args = (struct ThreadArgs *)threadArgs;
+  char *buffer = args->buffer;
+  int byteSent =
+      sendto(sockfd, buffer, strlen(buffer), 0,
+             (struct sockaddr *)&args->clientAdress, args->clientAdressSize);
+  if (byteSent < 0) {
+    perror("Could not send message to client");
+    exit(EXIT_FAILURE);
+  }
+  printf("Sent message to client: %s\n", buffer);
+  free(args);
+  return NULL;
+}
+
+int main(int argc, char const *argv[]) {
   if (argc != 2) {
     return 0;
   }
-  struct sockaddr* address;
-  int sockfd = initializeServerSocket(argv[1], &address);
-  char buffer[MAX_MESSAGE_SIZE] = {0};
+  struct sockaddr *address;
+  sockfd = initializeServerSocket(argv[1], &address);
+
+  pthread_t threads[MAX_CONECTIONS];
+
   while (1) {
-    memset(buffer, 0, sizeof(buffer));
-    struct sockaddr_in client_address;
-    socklen_t client_address_len = sizeof(client_address);
-    int bytesRead =
-        recvfrom(sockfd, buffer, MAX_MESSAGE_SIZE - 1, 0,
-                 (struct sockaddr*)&client_address, &client_address_len);
-
-    if (bytesRead < 1) {
-      close(sockfd);
-      break;
+    struct ThreadArgs *args = (struct ThreadArgs *)malloc(sizeof(struct ThreadArgs));
+    args->clientAdressSize = sizeof(struct sockaddr_in);
+    int byteReceived = recvfrom(sockfd, args->buffer, MAX_MESSAGE_SIZE, 0,
+                                (struct sockaddr *)&args->clientAdress,
+                                &args->clientAdressSize);
+    if (byteReceived < 0) {
+      perror("Could not receive message from client");
+      exit(EXIT_FAILURE);
     }
-
-    buffer[bytesRead] = '\0';
-    printf("%s\n", buffer);
-
-    char* mensagem = "oi tudo bem\n";
-    int bytesSent =
-        sendto(sockfd, mensagem, strlen(mensagem), 0,
-               (struct sockaddr*)&client_address, client_address_len);
-    if (bytesSent < 1) {
-      close(sockfd);
-      break;
+    printf("Received message from client: %s\n", args->buffer);
+    int threadResponse =
+        pthread_create(&threads[numberThreads], NULL, ThreadMain, (void *)args);
+    if (threadResponse) {
+      printf("Error creating thread\n");
+      exit(EXIT_FAILURE);
+    } else {
+      numberThreads++;
     }
   }
-
   return 0;
 }
