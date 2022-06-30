@@ -2,6 +2,7 @@
 #include <errno.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <pthread.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,13 +12,18 @@
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
-#include <pthread.h>
 
 #define MAX_MESSAGE_SIZE 500
 #define MAX_CONECTIONS 15
 
 int sockfd;
 int numberThreads = 0;
+
+enum COMMAND_TYPE {
+  REQ_ADD = 1,
+  REQ_REM = 2,
+  REQ_INF = 5,
+};
 
 void *ThreadMain(void *threadArgs);
 
@@ -58,6 +64,72 @@ int initializeServerSocket(const char *port, struct sockaddr **address) {
   return serverfd;
 }
 
+typedef struct {
+  int idMessage;
+  int idOrigem;
+  int idDestino;
+  int idPayload[MAX_CONECTIONS];
+} Command;
+
+Command interpretCommand(char* buffer) {
+  char *commandToken = strtok(buffer, " ");
+  int commandSent = atoi(commandToken);
+  Command command;
+
+  switch (commandSent) {
+    case REQ_ADD:
+      command.idMessage = REQ_ADD;
+      break;
+    case REQ_REM:
+      command.idMessage = REQ_REM;
+      commandToken = strtok(NULL, " ");
+      command.idOrigem = atoi(commandToken);
+      break;
+    case REQ_INF:
+      command.idMessage = REQ_INF;
+      commandToken = strtok(NULL, " ");
+      command.idOrigem = atoi(commandToken);
+      commandToken = strtok(NULL, " ");
+      command.idDestino = atoi(commandToken);
+      break;
+    default:
+      break;
+  }
+  return command;
+}
+
+void mountCommand(Command command, char *buffer) {
+    strcat(buffer,command.idMessage);
+    if(command.idOrigem!=-1){
+      strcat(buffer," ");
+      strcat(buffer,command.idOrigem);
+    }
+    if(command.idDestino!=-1){
+      strcat(buffer," ");
+      strcat(buffer,command.idDestino);
+    }
+    for (int i = 0; i < command.idPayload[i]!=-1; i++)
+    {
+      strcat(buffer," ");
+      strcat(buffer,command.idPayload[i]);
+    }
+}
+
+int executeCommand(Command command, int sockfd, char* commandOutput) {
+  switch (command.idMessage) {
+    case REQ_ADD:
+      printf("Adicionando novo cliente\n");
+      break;
+    case REQ_REM:
+      printf("Removendo cliente\n");
+      break;
+    case REQ_INF:
+     printf("Informando cliente\n");
+      break;
+  }
+  return 0;
+}
+
 void *ThreadMain(void *threadArgs) {
   struct ThreadArgs *args = (struct ThreadArgs *)threadArgs;
   char *buffer = args->buffer;
@@ -83,7 +155,8 @@ int main(int argc, char const *argv[]) {
   pthread_t threads[MAX_CONECTIONS];
 
   while (1) {
-    struct ThreadArgs *args = (struct ThreadArgs *)malloc(sizeof(struct ThreadArgs));
+    struct ThreadArgs *args =
+        (struct ThreadArgs *)malloc(sizeof(struct ThreadArgs));
     args->clientAdressSize = sizeof(struct sockaddr_in);
     int byteReceived = recvfrom(sockfd, args->buffer, MAX_MESSAGE_SIZE, 0,
                                 (struct sockaddr *)&args->clientAdress,
@@ -93,6 +166,10 @@ int main(int argc, char const *argv[]) {
       exit(EXIT_FAILURE);
     }
     printf("Received message from client: %s\n", args->buffer);
+
+    Command command = interpretCommand(args->buffer);
+    executeCommand(command, sockfd, args->buffer);
+
     int threadResponse =
         pthread_create(&threads[numberThreads], NULL, ThreadMain, (void *)args);
     if (threadResponse) {
