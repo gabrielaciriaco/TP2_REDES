@@ -164,6 +164,12 @@ void mountListResponse(char *buffer) {
   strcat(buffer, aux);
 }
 
+void mountErrorResponse(char *buffer, Command command, int errorCode) {
+  char aux[MAX_MESSAGE_SIZE] = "";
+  sprintf(aux, "%d %d %d", ERROR, command.idDestino, errorCode);
+  strcat(buffer, aux);
+}
+
 void addEquipment(char *responseMessage, struct sockaddr_in *clientAdress) {
   int i = returnEmptyArrayIndex();
   avaiableEquipments[i].id = (i + 1);
@@ -191,21 +197,17 @@ void removeEquipment(char *responseMessage, struct sockaddr_in idOriginAdress,
   struct sockaddr_in clientAdress;
   if (avaiableEquipments[(command.idOrigem - 1)].id != -1) {
     clientAdress = avaiableEquipments[(command.idOrigem - 1)].adresses;
-
     avaiableEquipments[(command.idOrigem - 1)].id = -1;
-    if (avaiableEquipments[(command.idOrigem - 1)].id != 1) {
-      for (int i = command.idDestino; i < numberEquipments; i++) {
-        avaiableEquipments[i - 1].id = avaiableEquipments[i].id;
-        avaiableEquipments[i - 1].adresses = avaiableEquipments[i].adresses;
-      }
-      numberEquipments--;
-      mountRemoveResponse(responseMessage, command);
-      printf("Equipment %d removed\n", command.idOrigem);
-    } else {
-      clientAdress = idOriginAdress;
-
-      // montar resposta de erro
+    for (int i = command.idDestino; i < numberEquipments; i++) {
+      avaiableEquipments[i - 1].id = avaiableEquipments[i].id;
+      avaiableEquipments[i - 1].adresses = avaiableEquipments[i].adresses;
     }
+    numberEquipments--;
+    mountRemoveResponse(responseMessage, command);
+    printf("Equipment %d removed\n", command.idOrigem);
+  } else {
+    clientAdress = idOriginAdress;
+    mountErrorResponse(responseMessage, command, EQ_NOT_FOUND);
   }
 };
 
