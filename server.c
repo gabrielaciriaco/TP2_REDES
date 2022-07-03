@@ -124,6 +124,7 @@ void mountListResponse(char *buffer) {
   for (int i = 0; i < numberEquipments; i++) {
     sprintf(aux, "%s %d", aux, avaiableEquipments[i].id);
   }
+  sprintf(aux,"%s ", aux);
   sprintf(aux,"%s\n", aux);
   strcat(buffer, aux);
 }
@@ -204,14 +205,14 @@ void infoEquipment(char *responseMessage, struct sockaddr_in clientAdress,
     printf("Equipment %d not found\n", command.idDestino);
     mountErrorResponse(responseMessage, TARGET_EQ_NOT_FOUND);
     int byteSent = sendto(sockfd, responseMessage, strlen(responseMessage), 0,
-                          (struct sockaddr *)&clientAdress, 16);
+                          (struct sockaddr *)&avaiableEquipments[(command.idOrigem - 1)].adresses, 16);
     if (byteSent < 1) {
       perror("Could not send message");
       exit(EXIT_FAILURE);
     }
   } else {
      int byteSent = sendto(sockfd, buffer, strlen(buffer), 0,
-                          (struct sockaddr *)&clientAdress, 16);
+                          (struct sockaddr *)&avaiableEquipments[(command.idDestino - 1)].adresses, 16);
     if (byteSent < 1) {
       perror("Could not send message");
       exit(EXIT_FAILURE);
@@ -220,7 +221,9 @@ void infoEquipment(char *responseMessage, struct sockaddr_in clientAdress,
 };
 
 void interpretCommand(struct ThreadArgs *args) {
-  char *commandToken = strtok(args->buffer, " ");
+  char aux[MAX_MESSAGE_SIZE];
+  strcpy(aux, args->buffer);
+  char *commandToken = strtok(aux, " ");
   int commandSent = atoi(commandToken);
   char responseMessage[MAX_MESSAGE_SIZE] = "";
   Command command;
@@ -237,7 +240,8 @@ void interpretCommand(struct ThreadArgs *args) {
       removeEquipment(responseMessage, args->clientAdress, command);
       break;
     case REQ_INF:
-      command.idMessage = REQ_INF;
+    case RES_INF:
+      command.idMessage = commandSent;
       commandToken = strtok(NULL, " ");
       command.idOrigem = atoi(commandToken);
       commandToken = strtok(NULL, " ");

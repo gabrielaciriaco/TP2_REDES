@@ -7,7 +7,7 @@ EXEC_SERVER=./server
 all: $(EXEC_EQUIPMENT) $(EXEC_SERVER)
 
 $(EXEC_EQUIPMENT): equipment.c
-	$(CC) $(CFLAGS) equipment.c -o $(EXEC_EQUIPMENT)
+	$(CC) $(CFLAGS) $(THREADFLAG) equipment.c -o $(EXEC_EQUIPMENT)
 
 $(EXEC_SERVER): server.c 
 	$(CC) $(CFLAGS) $(THREADFLAG) server.c  -o $(EXEC_SERVER)

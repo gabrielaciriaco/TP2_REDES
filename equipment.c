@@ -32,7 +32,7 @@ enum ERRORS_TYPE {
   TARGET_EQ_NOT_FOUND = 3,
   LIMIT_EXCEED = 4,
 };
-int equipmentId = 0;
+int equipmentId = 1;
 int equipments[NUMBER_EQUIPMENTS];
 int clientfd;
 socklen_t clientAdressSize = sizeof(struct sockaddr_in);
@@ -54,7 +54,7 @@ void buildRESINFO(char *buffer, int idOrigin, int idDestination) {
   sprintf(buffer, "%d %d %d ", command.idMessage, command.idOrigem,
           command.idDestino);
   buffer[strlen(buffer) - 1] = '\0';
-  sprintf(buffer, "%s%d.%d%d\n", buffer, rand() % 9, rand() % 9, rand() % 9);
+  sprintf(buffer, " %s%d.%d%d\n", buffer, rand() % 9, rand() % 9, rand() % 9);
 }
 
 void RequestAdd(struct sockaddr_in serverAdress) {
@@ -85,7 +85,7 @@ void RequestRemove(struct sockaddr_in serverAdress) {
 }
 
 void RequestInfo(int targetId, struct sockaddr_in serverAdress) {
-  char message[MAX_MESSAGE_SIZE];
+  char message[MAX_MESSAGE_SIZE] = "";
   Command command;
   command.idMessage = REQ_INF;
   command.idOrigem = equipmentId;
@@ -109,9 +109,12 @@ void ListEquipments() {
   printf("\n");
 }
 
-void executeCommand(char *command, int targetEquipmentID,
+void executeCommand(char *command,
                     struct sockaddr_in serverAdress) {
+  char *buffer = strdup(command);
+  char *commandToken;
   char symbol = command[0];
+  int destinoID;
   switch (symbol) {
     case 'l':
       ListEquipments();
@@ -120,7 +123,12 @@ void executeCommand(char *command, int targetEquipmentID,
       RequestRemove(serverAdress);
       break;
     case 'r':
-      RequestInfo(targetEquipmentID, serverAdress);
+      strtok(buffer," "); //request
+      strtok(NULL, " "); // information
+      strtok(NULL, " "); // from
+      commandToken = strtok(NULL, " ");
+      destinoID = atoi(commandToken);
+      RequestInfo(destinoID, serverAdress);
       break;
     default:
       break;
@@ -160,13 +168,13 @@ void executeErrorID(int errorCode) {
       break;
   }
 }
-void executeRESADD(int equipmentId) { printf("New ID: %d\n", equipmentId); }
+void executeRESADD(int id) { printf("New ID: %d\n", id);  equipmentId = id;}
 void executeRESLIST() {
   char *eq;
-  eq = strtok(NULL, " ");
-  for (int i = 0; eq != NULL; i++) {
+  int i = 0;
+  while ((eq = strtok(NULL, " ")) != NULL) {
     equipments[i] = atoi(eq);
-    eq = strtok(NULL, " ");
+    i++;
   }
 }
 void executeOK() {
@@ -179,7 +187,7 @@ void executeREQINF(struct sockaddr_in serverAdress, int idOrigem,
   buildRESINFO(message, idOrigem, idDestino);
   int byteSent = sendto(clientfd, message, strlen(message), 0,
                         (struct sockaddr *)&serverAdress, 16);
-  if (byteSent<1) {
+  if (byteSent < 1) {
     perror("Could not send message");
     exit(EXIT_FAILURE);
   }
@@ -239,6 +247,7 @@ void *ReceiveThread(void *data) {
       exit(EXIT_FAILURE);
     }
     buffer[byteReceived] = '\0';
+    InterpretCommand(buffer, threadData);
   }
   free(threadData);
   pthread_exit(NULL);
@@ -248,16 +257,8 @@ void *SendThread(void *data) {
   while (1) {
     char buffer[MAX_MESSAGE_SIZE];
     memset(buffer, 0, sizeof(buffer));
-    int destinoEquipmentId = 0;
     if (nonBlockRead(buffer)) {
-      executeCommand(strdup(buffer), destinoEquipmentId,
-                     threadData->serverAdress);
-      int byteSent = sendto(clientfd, buffer, strlen(buffer), 0,
-                            (struct sockaddr *)&threadData->serverAdress, 16);
-      if (byteSent<1) {
-        perror("Could not send message");
-        exit(EXIT_FAILURE);
-      }
+      executeCommand(strdup(buffer), threadData->serverAdress);
     }
   }
   free(threadData);
@@ -268,9 +269,9 @@ int initializeClientSocket(const char *port) {
   struct sockaddr *address;
   struct sockaddr_in addressv4;
 
-    addressv4.sin_addr.s_addr = htonl(INADDR_ANY);
-    addressv4.sin_port = htons(atoi(port));
-    addressv4.sin_family = AF_INET;
+  addressv4.sin_addr.s_addr = htonl(INADDR_ANY);
+  addressv4.sin_port = htons(atoi(port));
+  addressv4.sin_family = AF_INET;
 
   addressSize = sizeof(addressv4);
   address = (struct sockaddr *)&addressv4;
@@ -295,7 +296,7 @@ int main(int argc, char const *argv[]) {
   if (argc != 3) {
     return 0;
   }
-  
+
   clientfd = initializeClientSocket("0");
   struct sockaddr_in serverAddress;
   serverAddress.sin_family = AF_INET;
