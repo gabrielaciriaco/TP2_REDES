@@ -60,6 +60,7 @@ void buildRESINFO(char *buffer, int idOrigin, int idDestination)
   char randomNumbers[10] = "";
   sprintf(randomNumbers, "%d.%d%d\n", rand() % 9, rand() % 9, rand() % 9);
   strcat(buffer, randomNumbers);
+  printf("requested information\n");
 }
 
 void RequestAdd(struct sockaddr_in serverAdress)
