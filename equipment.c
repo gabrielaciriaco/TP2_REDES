@@ -185,8 +185,8 @@ void executeErrorID(int errorCode)
     printf("Target equipment not found\n");
     break;
   case LIMIT_EXCEED:
-    perror("Equipment limit exceeded\n");
-    exit(0);
+    printf("Equipment limit exceeded\n");
+    exit(-1);
     break;
   }
 }
@@ -198,23 +198,25 @@ void executeRESADD(int id)
 void executeBroadcastRESADD(int id)
 {
   printf("Equipment %d added\n", id);
-  for(int i=0; i<MAX_CONECTIONS; i++)
+  for (int i = 0; i < MAX_CONECTIONS; i++)
   {
-    if(equipments[i] == id){
+    if (equipments[i] == id)
+    {
       break;
     }
-    if(equipments[i] == 0)
+    if (equipments[i] == 0)
     {
       equipments[i] = id;
       break;
     }
   }
 }
-void executeBroadcastREQREM(int id){
+void executeBroadcastREQREM(int id)
+{
   printf("Equipment %d removed\n", id);
-  for(int i=0; i<MAX_CONECTIONS; i++)
+  for (int i = 0; i < MAX_CONECTIONS; i++)
   {
-    if(equipments[i] == id)
+    if (equipments[i] == id)
     {
       equipments[i] = 0;
       break;
