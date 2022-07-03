@@ -14,7 +14,7 @@
 #include <unistd.h>
 
 #define MAX_MESSAGE_SIZE 500
-#define MAX_CONECTIONS 15
+#define MAX_CONECTIONS 2
 
 int sockfd;
 int broadcastfd;
@@ -198,6 +198,17 @@ void mountErrorResponse(char *buffer, int errorCode)
 
 void addEquipment(char *responseMessage, struct sockaddr_in clientAdress)
 {
+  if(numberEquipments==MAX_CONECTIONS)
+    {
+      printf("Limit exceeded\n");
+      char buf[MAX_MESSAGE_SIZE] = "";
+      mountErrorResponse(buf, LIMIT_EXCEED);
+      int byteSend = sendto(sockfd, buf, strlen(buf), 0, (struct sockaddr *)&clientAdress, 16);
+      if(byteSend<1){
+        exit(EXIT_FAILURE);
+      }
+      return;
+  }
   int i = returnEmptyArrayIndex();
   avaiableEquipments[i].id = (i + 1);
   avaiableEquipments[i].adresses = clientAdress;

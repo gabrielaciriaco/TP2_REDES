@@ -35,8 +35,9 @@ enum ERRORS_TYPE
   LIMIT_EXCEED = 4,
 };
 int equipmentId = 1;
-int equipments[NUMBER_EQUIPMENTS];
+int equipments[NUMBER_EQUIPMENTS] = {0};
 int clientfd;
+int broadcastfd;
 socklen_t clientAdressSize = sizeof(struct sockaddr_in);
 struct ThreadArgs
 {
@@ -185,7 +186,7 @@ void executeErrorID(int errorCode)
     break;
   case LIMIT_EXCEED:
     perror("Equipment limit exceeded\n");
-    exit(EXIT_FAILURE);
+    exit(0);
     break;
   }
 }
@@ -193,6 +194,32 @@ void executeRESADD(int id)
 {
   printf("New ID: %d\n", id);
   equipmentId = id;
+}
+void executeBroadcastRESADD(int id)
+{
+  printf("Equipment %d added\n", id);
+  for(int i=0; i<MAX_CONECTIONS; i++)
+  {
+    if(equipments[i] == id){
+      break;
+    }
+    if(equipments[i] == 0)
+    {
+      equipments[i] = id;
+      break;
+    }
+  }
+}
+void executeBroadcastREQREM(int id){
+  printf("Equipment %d removed\n", id);
+  for(int i=0; i<MAX_CONECTIONS; i++)
+  {
+    if(equipments[i] == id)
+    {
+      equipments[i] = 0;
+      break;
+    }
+  }
 }
 void executeRESLIST()
 {
@@ -266,7 +293,26 @@ void InterpretCommand(char *buffer, struct ThreadArgs *threadData)
     break;
   }
 }
+void InterpretBroadcastCommand(char *buffer)
+{
+  char *commandToken = strtok(buffer, " ");
+  int commandReceive = atoi(commandToken);
+  Command command;
 
+  switch (commandReceive)
+  {
+  case RES_ADD:
+    commandToken = strtok(NULL, " ");
+    command.idOrigem = atoi(commandToken);
+    executeBroadcastRESADD(command.idOrigem);
+    break;
+  case REQ_REM:
+    commandToken = strtok(NULL, " ");
+    command.idOrigem = atoi(commandToken);
+    executeBroadcastREQREM(command.idOrigem);
+    break;
+  }
+}
 void *ReceiveThread(void *data)
 {
   struct ThreadArgs *threadData = (struct ThreadArgs *)data;
@@ -283,6 +329,26 @@ void *ReceiveThread(void *data)
     }
     buffer[byteReceived] = '\0';
     InterpretCommand(buffer, threadData);
+  }
+  free(threadData);
+  pthread_exit(NULL);
+}
+void *ReceiveBroadcastThread(void *data)
+{
+  struct ThreadArgs *threadData = (struct ThreadArgs *)data;
+  while (1)
+  {
+    char buffer[MAX_MESSAGE_SIZE];
+    memset(buffer, 0, sizeof(buffer));
+    int byteReceived = recvfrom(broadcastfd, buffer, MAX_MESSAGE_SIZE, 0,
+                                (struct sockaddr *)&threadData->serverAdress,
+                                &clientAdressSize);
+    if (byteReceived < 0)
+    {
+      exit(EXIT_FAILURE);
+    }
+    buffer[byteReceived] = '\0';
+    InterpretBroadcastCommand(buffer);
   }
   free(threadData);
   pthread_exit(NULL);
@@ -343,10 +409,16 @@ int main(int argc, char const *argv[])
   }
 
   clientfd = initializeClientSocket("0");
+  broadcastfd = initializeClientSocket("1313");
   struct sockaddr_in serverAddress;
   serverAddress.sin_family = AF_INET;
   serverAddress.sin_port = htons(atoi(argv[2]));
   serverAddress.sin_addr.s_addr = inet_addr(argv[1]);
+
+  struct sockaddr_in broadcastAddress;
+  broadcastAddress.sin_family = AF_INET;
+  broadcastAddress.sin_port = htons(1313);
+  broadcastAddress.sin_addr.s_addr = inet_addr(argv[1]);
 
   RequestAdd(serverAddress);
 
@@ -371,7 +443,18 @@ int main(int argc, char const *argv[])
     printf("Error creating thread\n");
     exit(EXIT_FAILURE);
   }
+  pthread_t broadcastThread;
+  struct ThreadArgs *broadcastThreadArgs =
+      (struct ThreadArgs *)malloc(sizeof(struct ThreadArgs));
+  broadcastThreadArgs->serverAdress = broadcastAddress;
+  int byteBroadcast = pthread_create(&broadcastThread, NULL, ReceiveBroadcastThread, args);
+  if (byteBroadcast != 0)
+  {
+    printf("Error creating thread\n");
+    exit(EXIT_FAILURE);
+  }
   pthread_join(receiveThread, NULL);
   pthread_join(sendThread, NULL);
+  pthread_join(broadcastThread, NULL);
   return 0;
 }
