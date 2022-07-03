@@ -108,7 +108,7 @@ int returnEmptyArrayIndex() {
 
 void mountAddResponse(char *buffer, int i) {
   char aux[MAX_MESSAGE_SIZE] = "";
-  sprintf(aux, "%d %d", RES_ADD, i);
+  sprintf(aux, "%d %d\n", RES_ADD, i);
   strcat(buffer, aux);
 }
 
@@ -227,6 +227,8 @@ void interpretCommand(struct ThreadArgs *args) {
 
 void *ThreadMain(void *threadArgs) {
   struct ThreadArgs *args = (struct ThreadArgs *)threadArgs;
+  interpretCommand(args);
+  numberThreads--;
   free(args);
   return NULL;
 }
@@ -251,8 +253,6 @@ int main(int argc, char const *argv[]) {
       perror("Could not receive message from client");
       exit(EXIT_FAILURE);
     }
-    printf("Received message from client: %s\n", args->buffer);
-
     int threadResponse =
         pthread_create(&threads[numberThreads], NULL, ThreadMain, (void *)args);
     if (threadResponse) {
