@@ -1,88 +1,329 @@
+// Client side C/C++ program to demonstrate Socket
+// programming
 #include <arpa/inet.h>
-#include <errno.h>
-#include <netdb.h>
-#include <netinet/in.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
-#include <sys/types.h>
+#include <sys/time.h>
+#include <time.h>
 #include <unistd.h>
 
+#define STDIN 0
 #define MAX_MESSAGE_SIZE 500
+#define NUMBER_EQUIPMENTS 15
+#define MAX_CONECTIONS 15
 
-int connectToServer(char *argv[]) {
-  int domain, addressSize, sockfd;
+enum COMMAND_TYPE {
+  REQ_ADD = 1,
+  REQ_REM = 2,
+  RES_ADD = 3,
+  RES_LIST = 4,
+  REQ_INF = 5,
+  RES_INF = 6,
+  ERROR = 7,
+  OK = 8,
+};
 
+enum ERRORS_TYPE {
+  EQ_NOT_FOUND = 1,
+  SOURCE_EQ_NOT_FOUND = 2,
+  TARGET_EQ_NOT_FOUND = 3,
+  LIMIT_EXCEED = 4,
+};
+int equipmentId = 0;
+int equipments[NUMBER_EQUIPMENTS];
+int clientfd;
+socklen_t clientAdressSize = sizeof(struct sockaddr_in);
+struct ThreadArgs {
+  struct sockaddr_in serverAdress;
+};
+typedef struct {
+  int idMessage;
+  int idOrigem;
+  int idDestino;
+  int idPayload;
+} Command;
+
+void buildRESINFO(char *buffer, int idOrigin, int idDestination) {
+  Command command;
+  command.idMessage = RES_INF;
+  command.idOrigem = idOrigin;
+  command.idDestino = idDestination;
+  sprintf(buffer, "%d %d %d ", command.idMessage, command.idOrigem,
+          command.idDestino);
+  buffer[strlen(buffer) - 1] = '\0';
+  sprintf(buffer, "%s%d.%d%d\n", buffer, rand() % 9, rand() % 9, rand() % 9);
+}
+
+void RequestAdd(struct sockaddr_in serverAdress) {
+  char message[MAX_MESSAGE_SIZE];
+  Command command;
+  command.idMessage = REQ_ADD;
+  sprintf(message, "%d", command.idMessage);
+  int byteSent = sendto(clientfd, message, strlen(message), 0,
+                        (struct sockaddr *)&serverAdress, 16);
+  if (byteSent < 1) {
+    perror("Could not send message");
+    exit(EXIT_FAILURE);
+  }
+}
+
+void RequestRemove(struct sockaddr_in serverAdress) {
+  char message[MAX_MESSAGE_SIZE];
+  Command command;
+  command.idMessage = REQ_REM;
+  command.idOrigem = equipmentId;
+  sprintf(message, "%d %d", command.idMessage, command.idOrigem);
+  int byteSent = sendto(clientfd, message, strlen(message), 0,
+                        (struct sockaddr *)&serverAdress, 16);
+  if (byteSent < 1) {
+    perror("Could not send message");
+    exit(EXIT_FAILURE);
+  }
+}
+
+void RequestInfo(int targetId, struct sockaddr_in serverAdress) {
+  char message[MAX_MESSAGE_SIZE];
+  Command command;
+  command.idMessage = REQ_INF;
+  command.idOrigem = equipmentId;
+  command.idDestino = targetId;
+  sprintf(message, "%d %d %d", command.idMessage, command.idOrigem,
+          command.idDestino);
+  int byteSent = sendto(clientfd, message, strlen(message), 0,
+                        (struct sockaddr *)&serverAdress, 16);
+  if (byteSent < 1) {
+    perror("Could not send message");
+    exit(EXIT_FAILURE);
+  }
+}
+
+void ListEquipments() {
+  for (int i = 0; i < MAX_CONECTIONS; i++) {
+    if (equipments[i] != 0) {
+      printf("%d ", equipments[i]);
+    }
+  }
+  printf("\n");
+}
+
+void executeCommand(char *command, int targetEquipmentID,
+                    struct sockaddr_in serverAdress) {
+  char symbol = command[0];
+  switch (symbol) {
+    case 'l':
+      ListEquipments();
+      break;
+    case 'c':
+      RequestRemove(serverAdress);
+      break;
+    case 'r':
+      RequestInfo(targetEquipmentID, serverAdress);
+      break;
+    default:
+      break;
+  }
+}
+
+int nonBlockRead(char *message) {
+  struct timeval tv;
+  fd_set readfds;
+  tv.tv_sec = 0;
+  tv.tv_usec = 50000;
+  FD_ZERO(&readfds);
+  FD_SET(STDIN, &readfds);
+  select(STDIN + 1, &readfds, NULL, NULL, &tv);
+  if (FD_ISSET(STDIN, &readfds)) {
+    read(STDIN, message, MAX_MESSAGE_SIZE - 1);
+    return 1;
+  } else
+    fflush(stdout);
+  return 0;
+}
+
+void executeErrorID(int errorCode) {
+  switch (errorCode) {
+    case EQ_NOT_FOUND:
+      printf("Equipment not found\n");
+      break;
+    case SOURCE_EQ_NOT_FOUND:
+      printf("Source equipment not found\n");
+      break;
+    case TARGET_EQ_NOT_FOUND:
+      printf("Target equipment not found\n");
+      break;
+    case LIMIT_EXCEED:
+      perror("Equipment limit exceeded\n");
+      exit(EXIT_FAILURE);
+      break;
+  }
+}
+void executeRESADD(int equipmentId) { printf("New ID: %d\n", equipmentId); }
+void executeRESLIST() {
+  char *eq;
+  eq = strtok(NULL, " ");
+  for (int i = 0; eq != NULL; i++) {
+    equipments[i] = atoi(eq);
+    eq = strtok(NULL, " ");
+  }
+}
+void executeOK() {
+  printf("Successful removal\n");
+  exit(-1);
+}
+void executeREQINF(struct sockaddr_in serverAdress, int idOrigem,
+                   int idDestino) {
+  char message[MAX_MESSAGE_SIZE];
+  buildRESINFO(message, idOrigem, idDestino);
+  int byteSent = sendto(clientfd, message, strlen(message), 0,
+                        (struct sockaddr *)&serverAdress, 16);
+  if (byteSent<1) {
+    perror("Could not send message");
+    exit(EXIT_FAILURE);
+  }
+}
+void executeRESINF(int idOrigem, char *payload) {
+  printf("Value from %d: %s", idOrigem, payload);
+}
+
+void InterpretCommand(char *buffer, struct ThreadArgs *threadData) {
+  char *commandToken = strtok(buffer, " ");
+  int commandReceive = atoi(commandToken);
+  Command command;
+
+  switch (commandReceive) {
+    case ERROR:
+      commandToken = strtok(NULL, " ");
+      int errorCode = atoi(commandToken);
+      executeErrorID(errorCode);
+      break;
+    case RES_ADD:
+      commandToken = strtok(NULL, " ");
+      command.idOrigem = atoi(commandToken);
+      executeRESADD(command.idOrigem);
+      break;
+    case RES_LIST:
+      executeRESLIST();
+      break;
+    case OK:
+      executeOK();
+      break;
+    case REQ_INF:
+      commandToken = strtok(NULL, " ");
+      command.idOrigem = atoi(commandToken);
+      commandToken = strtok(NULL, " ");
+      command.idDestino = atoi(commandToken);
+      executeREQINF(threadData->serverAdress, command.idOrigem,
+                    command.idDestino);
+      break;
+    case RES_INF:
+      commandToken = strtok(NULL, " ");
+      command.idOrigem = atoi(commandToken);
+      char *payload = strtok(NULL, " ");
+      executeRESINF(command.idOrigem, payload);
+      break;
+  }
+}
+
+void *ReceiveThread(void *data) {
+  struct ThreadArgs *threadData = (struct ThreadArgs *)data;
+  while (1) {
+    char buffer[MAX_MESSAGE_SIZE];
+    memset(buffer, 0, sizeof(buffer));
+    int byteReceived = recvfrom(clientfd, buffer, MAX_MESSAGE_SIZE, 0,
+                                (struct sockaddr *)&threadData->serverAdress,
+                                &clientAdressSize);
+    if (byteReceived < 0) {
+      exit(EXIT_FAILURE);
+    }
+    buffer[byteReceived] = '\0';
+  }
+  free(threadData);
+  pthread_exit(NULL);
+}
+void *SendThread(void *data) {
+  struct ThreadArgs *threadData = (struct ThreadArgs *)data;
+  while (1) {
+    char buffer[MAX_MESSAGE_SIZE];
+    memset(buffer, 0, sizeof(buffer));
+    int destinoEquipmentId = 0;
+    if (nonBlockRead(buffer)) {
+      executeCommand(strdup(buffer), destinoEquipmentId,
+                     threadData->serverAdress);
+      int byteSent = sendto(clientfd, buffer, strlen(buffer), 0,
+                            (struct sockaddr *)&threadData->serverAdress, 16);
+      if (byteSent<1) {
+        perror("Could not send message");
+        exit(EXIT_FAILURE);
+      }
+    }
+  }
+  free(threadData);
+  pthread_exit(NULL);
+}
+int initializeClientSocket(const char *port) {
+  int addressSize, clientfd, yes = 1;
   struct sockaddr *address;
   struct sockaddr_in addressv4;
-  struct sockaddr_in6 addressv6;
 
-  addressv4.sin_family = AF_INET;
-  addressv4.sin_port = htons(atoi(argv[2]));
+    addressv4.sin_addr.s_addr = htonl(INADDR_ANY);
+    addressv4.sin_port = htons(atoi(port));
+    addressv4.sin_family = AF_INET;
 
-  addressv6.sin6_family = AF_INET6;
-  addressv6.sin6_port = htons(atoi(argv[2]));
+  addressSize = sizeof(addressv4);
+  address = (struct sockaddr *)&addressv4;
 
-  if (inet_pton(AF_INET, argv[1], &addressv4.sin_addr) > 0) {
-    domain = AF_INET;
-    addressSize = sizeof(addressv4);
-    address = (struct sockaddr *)&addressv4;
-  }
-
-  if (inet_pton(AF_INET6, argv[1], &addressv6.sin6_addr) > 0) {
-    domain = AF_INET6;
-    addressSize = sizeof(addressv6);
-    address = (struct sockaddr *)&addressv6;
-  }
-
-  if ((sockfd = socket(domain, SOCK_STREAM, IPPROTO_TCP)) == 0) {
+  if ((clientfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == 0) {
     perror("Could not create socket");
     exit(EXIT_FAILURE);
   }
-
-  if (connect(sockfd, address, addressSize) == -1) {
-    perror("Could not connect to server");
+  if (setsockopt(clientfd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &yes,
+                 sizeof(yes)) == -1) {
+    perror("Could not set socket option");
     exit(EXIT_FAILURE);
   }
-
-  return sockfd;
+  if (bind(clientfd, address, addressSize) < 0) {
+    perror("Could not bind port to socket");
+    exit(EXIT_FAILURE);
+  }
+  return clientfd;
 }
 
-int main(int argc, char *argv[]) {
-  int sockfd = connectToServer(argv);
-
-  while (1) {
-    char buffer[MAX_MESSAGE_SIZE];
-
-    fflush(stdin);
-    scanf("%[^\n]%*c", buffer);
-
-    int isKill = strcmp(buffer, "kill") == 0;
-    
-    int bytesSent = send(sockfd, buffer, strlen(buffer), 0);
-
-    if (bytesSent == 0) {
-      perror("Could not communicate to server\n");
-      exit(EXIT_FAILURE);
-    }
-
-    if(isKill) {
-      exit(EXIT_SUCCESS);
-    }
-
-    memset(buffer, 0, sizeof(buffer));
-    int bytesRead = read(sockfd, buffer, MAX_MESSAGE_SIZE - 1);
-
-    if (bytesRead == 0) {
-      perror("Could not communicate to server\n");
-      exit(EXIT_FAILURE);
-    }
-
-    printf("%s", buffer);
+int main(int argc, char const *argv[]) {
+  if (argc != 3) {
+    return 0;
   }
+  
+  clientfd = initializeClientSocket("0");
+  struct sockaddr_in serverAddress;
+  serverAddress.sin_family = AF_INET;
+  serverAddress.sin_port = htons(atoi(argv[2]));
+  serverAddress.sin_addr.s_addr = inet_addr(argv[1]);
 
-  close(sockfd);
+  RequestAdd(serverAddress);
 
+  pthread_t receiveThread;
+  struct ThreadArgs *args =
+      (struct ThreadArgs *)malloc(sizeof(struct ThreadArgs));
+  args->serverAdress = serverAddress;
+  int byteReceived = pthread_create(&receiveThread, NULL, ReceiveThread, args);
+  if (byteReceived != 0) {
+    printf("Error creating thread\n");
+    exit(EXIT_FAILURE);
+  }
+  pthread_t sendThread;
+  struct ThreadArgs *sendThreadArgs =
+      (struct ThreadArgs *)malloc(sizeof(struct ThreadArgs));
+  sendThreadArgs->serverAdress = serverAddress;
+  int byteStatus =
+      pthread_create(&sendThread, NULL, SendThread, sendThreadArgs);
+  if (byteStatus != 0) {
+    printf("Error creating thread\n");
+    exit(EXIT_FAILURE);
+  }
+  pthread_join(receiveThread, NULL);
+  pthread_join(sendThread, NULL);
   return 0;
 }
