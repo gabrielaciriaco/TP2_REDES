@@ -114,22 +114,23 @@ void mountAddResponse(char *buffer, int i) {
 
 void mountRemoveResponse(char *buffer, Command command) {
   char aux[MAX_MESSAGE_SIZE] = "";
-  sprintf(aux, "%d %d %d", OK, command.idOrigem, 1);
+  sprintf(aux, "%d %d %d\n", OK, command.idOrigem, 1);
   strcat(buffer, aux);
 }
 
 void mountListResponse(char *buffer) {
   char aux[MAX_MESSAGE_SIZE] = "";
-  sprintf(aux, "%d ", RES_LIST);
+  sprintf(aux, "%d", RES_LIST);
   for (int i = 0; i < numberEquipments; i++) {
     sprintf(aux, "%s %d", aux, avaiableEquipments[i].id);
   }
+  sprintf(aux,"%s\n", aux);
   strcat(buffer, aux);
 }
 
-void mountErrorResponse(char *buffer, Command command, int errorCode) {
+void mountErrorResponse(char *buffer, int errorCode) {
   char aux[MAX_MESSAGE_SIZE] = "";
-  sprintf(aux, "%d %d %d", ERROR, command.idDestino, errorCode);
+  sprintf(aux, "%d %d\n", ERROR,errorCode);
   strcat(buffer, aux);
 }
 
@@ -137,7 +138,7 @@ void addEquipment(char *responseMessage, struct sockaddr_in clientAdress) {
   int i = returnEmptyArrayIndex();
   avaiableEquipments[i].id = (i + 1);
   avaiableEquipments[i].adresses = clientAdress;
-  mountAddResponse(responseMessage, i);
+  mountAddResponse(responseMessage,(i+1));
   numberEquipments++;
   int byteSent = sendto(sockfd, responseMessage, strlen(responseMessage), 0,
                         (struct sockaddr *)&clientAdress, 16);
@@ -145,6 +146,7 @@ void addEquipment(char *responseMessage, struct sockaddr_in clientAdress) {
     perror("Could not send message");
     exit(EXIT_FAILURE);
   }
+  memset(responseMessage, 0, MAX_MESSAGE_SIZE);
   mountListResponse(responseMessage);
   byteSent = sendto(sockfd, responseMessage, strlen(responseMessage), 0,
                     (struct sockaddr *)&clientAdress, 16);
@@ -172,7 +174,7 @@ void removeEquipment(char *responseMessage, struct sockaddr_in idOriginAdress,
     printf("Equipment %d removed\n", command.idOrigem);
   } else {
     clientAdress = idOriginAdress;
-    mountErrorResponse(responseMessage, command, EQ_NOT_FOUND);
+    mountErrorResponse(responseMessage, EQ_NOT_FOUND);
     int byteSent = sendto(sockfd, responseMessage, strlen(responseMessage), 0,
                           (struct sockaddr *)&clientAdress, 16);
     if (byteSent < 1) {
@@ -183,15 +185,37 @@ void removeEquipment(char *responseMessage, struct sockaddr_in idOriginAdress,
 };
 
 void infoEquipment(char *responseMessage, struct sockaddr_in clientAdress,
-                   Command command) {
+                   Command command, char *buffer) {
   int foundOrigin =
       avaiableEquipments[(command.idOrigem - 1)].id == command.idOrigem;
   int foundDestiny =
       avaiableEquipments[(command.idDestino - 1)].id == command.idDestino;
 
   if (!foundOrigin) {
+    printf("Equipment %d not found\n", command.idOrigem);
+    mountErrorResponse(responseMessage, SOURCE_EQ_NOT_FOUND);
+    int byteSent = sendto(sockfd, responseMessage, strlen(responseMessage), 0,
+                          (struct sockaddr *)&clientAdress, 16);
+    if (byteSent < 1) {
+      perror("Could not send message");
+      exit(EXIT_FAILURE);
+    }
   } else if (!foundDestiny) {
+    printf("Equipment %d not found\n", command.idDestino);
+    mountErrorResponse(responseMessage, TARGET_EQ_NOT_FOUND);
+    int byteSent = sendto(sockfd, responseMessage, strlen(responseMessage), 0,
+                          (struct sockaddr *)&clientAdress, 16);
+    if (byteSent < 1) {
+      perror("Could not send message");
+      exit(EXIT_FAILURE);
+    }
   } else {
+     int byteSent = sendto(sockfd, buffer, strlen(buffer), 0,
+                          (struct sockaddr *)&clientAdress, 16);
+    if (byteSent < 1) {
+      perror("Could not send message");
+      exit(EXIT_FAILURE);
+    }
   }
 };
 
@@ -218,7 +242,7 @@ void interpretCommand(struct ThreadArgs *args) {
       command.idOrigem = atoi(commandToken);
       commandToken = strtok(NULL, " ");
       command.idDestino = atoi(commandToken);
-      infoEquipment(responseMessage, args->clientAdress, command);
+      infoEquipment(responseMessage, args->clientAdress, command, args->buffer);
       break;
     default:
       break;
