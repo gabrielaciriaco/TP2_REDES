@@ -15,7 +15,8 @@
 #define NUMBER_EQUIPMENTS 15
 #define MAX_CONECTIONS 15
 
-enum COMMAND_TYPE {
+enum COMMAND_TYPE
+{
   REQ_ADD = 1,
   REQ_REM = 2,
   RES_ADD = 3,
@@ -26,7 +27,8 @@ enum COMMAND_TYPE {
   OK = 8,
 };
 
-enum ERRORS_TYPE {
+enum ERRORS_TYPE
+{
   EQ_NOT_FOUND = 1,
   SOURCE_EQ_NOT_FOUND = 2,
   TARGET_EQ_NOT_FOUND = 3,
@@ -36,41 +38,47 @@ int equipmentId = 1;
 int equipments[NUMBER_EQUIPMENTS];
 int clientfd;
 socklen_t clientAdressSize = sizeof(struct sockaddr_in);
-struct ThreadArgs {
+struct ThreadArgs
+{
   struct sockaddr_in serverAdress;
 };
-typedef struct {
+typedef struct
+{
   int idMessage;
   int idOrigem;
   int idDestino;
   int idPayload;
 } Command;
 
-void buildRESINFO(char *buffer, int idOrigin, int idDestination) {
+void buildRESINFO(char *buffer, int idOrigin, int idDestination)
+{
   Command command;
   command.idMessage = RES_INF;
   command.idOrigem = idOrigin;
   command.idDestino = idDestination;
-  sprintf(buffer, "%d %d %d ", command.idMessage, command.idOrigem,
-          command.idDestino);
-  buffer[strlen(buffer) - 1] = '\0';
-  sprintf(buffer, " %s%d.%d%d\n", buffer, rand() % 9, rand() % 9, rand() % 9);
+  sprintf(buffer, "%d %d %d ", command.idMessage, command.idDestino, command.idOrigem);
+  char randomNumbers[10] = "";
+  sprintf(randomNumbers, "%d.%d%d\n", rand() % 9, rand() % 9, rand() % 9);
+  strcat(buffer, randomNumbers);
 }
 
-void RequestAdd(struct sockaddr_in serverAdress) {
+void RequestAdd(struct sockaddr_in serverAdress)
+{
   char message[MAX_MESSAGE_SIZE];
   Command command;
   command.idMessage = REQ_ADD;
   sprintf(message, "%d", command.idMessage);
   int byteSent = sendto(clientfd, message, strlen(message), 0,
                         (struct sockaddr *)&serverAdress, 16);
-  if (byteSent < 1) {
+  if (byteSent < 1)
+  {
     perror("Could not send message");
     exit(EXIT_FAILURE);
   }
 }
 
-void RequestRemove(struct sockaddr_in serverAdress) {
+void RequestRemove(struct sockaddr_in serverAdress)
+{
   char message[MAX_MESSAGE_SIZE];
   Command command;
   command.idMessage = REQ_REM;
@@ -78,31 +86,36 @@ void RequestRemove(struct sockaddr_in serverAdress) {
   sprintf(message, "%d %d", command.idMessage, command.idOrigem);
   int byteSent = sendto(clientfd, message, strlen(message), 0,
                         (struct sockaddr *)&serverAdress, 16);
-  if (byteSent < 1) {
+  if (byteSent < 1)
+  {
     perror("Could not send message");
     exit(EXIT_FAILURE);
   }
 }
 
-void RequestInfo(int targetId, struct sockaddr_in serverAdress) {
+void RequestInfo(int targetId, struct sockaddr_in serverAdress)
+{
   char message[MAX_MESSAGE_SIZE] = "";
   Command command;
   command.idMessage = REQ_INF;
   command.idOrigem = equipmentId;
   command.idDestino = targetId;
-  sprintf(message, "%d %d %d", command.idMessage, command.idOrigem,
-          command.idDestino);
+  sprintf(message, "%d %d %d", command.idMessage, command.idOrigem, command.idDestino);
   int byteSent = sendto(clientfd, message, strlen(message), 0,
                         (struct sockaddr *)&serverAdress, 16);
-  if (byteSent < 1) {
+  if (byteSent < 1)
+  {
     perror("Could not send message");
     exit(EXIT_FAILURE);
   }
 }
 
-void ListEquipments() {
-  for (int i = 0; i < MAX_CONECTIONS; i++) {
-    if (equipments[i] != 0) {
+void ListEquipments()
+{
+  for (int i = 0; i < MAX_CONECTIONS; i++)
+  {
+    if (equipments[i] != 0)
+    {
       printf("%d ", equipments[i]);
     }
   }
@@ -110,32 +123,35 @@ void ListEquipments() {
 }
 
 void executeCommand(char *command,
-                    struct sockaddr_in serverAdress) {
+                    struct sockaddr_in serverAdress)
+{
   char *buffer = strdup(command);
   char *commandToken;
   char symbol = command[0];
   int destinoID;
-  switch (symbol) {
-    case 'l':
-      ListEquipments();
-      break;
-    case 'c':
-      RequestRemove(serverAdress);
-      break;
-    case 'r':
-      strtok(buffer," "); //request
-      strtok(NULL, " "); // information
-      strtok(NULL, " "); // from
-      commandToken = strtok(NULL, " ");
-      destinoID = atoi(commandToken);
-      RequestInfo(destinoID, serverAdress);
-      break;
-    default:
-      break;
+  switch (symbol)
+  {
+  case 'l':
+    ListEquipments();
+    break;
+  case 'c':
+    RequestRemove(serverAdress);
+    break;
+  case 'r':
+    strtok(buffer, " "); // request
+    strtok(NULL, " ");   // information
+    strtok(NULL, " ");   // from
+    commandToken = strtok(NULL, " ");
+    destinoID = atoi(commandToken);
+    RequestInfo(destinoID, serverAdress);
+    break;
+  default:
+    break;
   }
 }
 
-int nonBlockRead(char *message) {
+int nonBlockRead(char *message)
+{
   struct timeval tv;
   fd_set readfds;
   tv.tv_sec = 0;
@@ -143,107 +159,125 @@ int nonBlockRead(char *message) {
   FD_ZERO(&readfds);
   FD_SET(STDIN, &readfds);
   select(STDIN + 1, &readfds, NULL, NULL, &tv);
-  if (FD_ISSET(STDIN, &readfds)) {
+  if (FD_ISSET(STDIN, &readfds))
+  {
     read(STDIN, message, MAX_MESSAGE_SIZE - 1);
     return 1;
-  } else
+  }
+  else
     fflush(stdout);
   return 0;
 }
 
-void executeErrorID(int errorCode) {
-  switch (errorCode) {
-    case EQ_NOT_FOUND:
-      printf("Equipment not found\n");
-      break;
-    case SOURCE_EQ_NOT_FOUND:
-      printf("Source equipment not found\n");
-      break;
-    case TARGET_EQ_NOT_FOUND:
-      printf("Target equipment not found\n");
-      break;
-    case LIMIT_EXCEED:
-      perror("Equipment limit exceeded\n");
-      exit(EXIT_FAILURE);
-      break;
+void executeErrorID(int errorCode)
+{
+  switch (errorCode)
+  {
+  case EQ_NOT_FOUND:
+    printf("Equipment not found\n");
+    break;
+  case SOURCE_EQ_NOT_FOUND:
+    printf("Source equipment not found\n");
+    break;
+  case TARGET_EQ_NOT_FOUND:
+    printf("Target equipment not found\n");
+    break;
+  case LIMIT_EXCEED:
+    perror("Equipment limit exceeded\n");
+    exit(EXIT_FAILURE);
+    break;
   }
 }
-void executeRESADD(int id) { printf("New ID: %d\n", id);  equipmentId = id;}
-void executeRESLIST() {
+void executeRESADD(int id)
+{
+  printf("New ID: %d\n", id);
+  equipmentId = id;
+}
+void executeRESLIST()
+{
   char *eq;
   int i = 0;
-  while ((eq = strtok(NULL, " ")) != NULL) {
+  while ((eq = strtok(NULL, " ")) != NULL)
+  {
     equipments[i] = atoi(eq);
     i++;
   }
 }
-void executeOK() {
+void executeOK()
+{
   printf("Successful removal\n");
   exit(-1);
 }
-void executeREQINF(struct sockaddr_in serverAdress, int idOrigem,
-                   int idDestino) {
-  char message[MAX_MESSAGE_SIZE];
-  buildRESINFO(message, idOrigem, idDestino);
-  int byteSent = sendto(clientfd, message, strlen(message), 0,
-                        (struct sockaddr *)&serverAdress, 16);
-  if (byteSent < 1) {
+void executeREQINF(struct sockaddr_in serverAdress, int idOrigem, int idDestino, char *originalMessgge)
+{
+
+  buildRESINFO(originalMessgge, idOrigem, idDestino);
+  int byteSent = sendto(clientfd, originalMessgge, strlen(originalMessgge), 0, (struct sockaddr *)&serverAdress, 16);
+  if (byteSent < 1)
+  {
     perror("Could not send message");
     exit(EXIT_FAILURE);
   }
 }
-void executeRESINF(int idOrigem, char *payload) {
+void executeRESINF(int idOrigem, char *payload)
+{
   printf("Value from %d: %s", idOrigem, payload);
 }
 
-void InterpretCommand(char *buffer, struct ThreadArgs *threadData) {
+void InterpretCommand(char *buffer, struct ThreadArgs *threadData)
+{
+  char *originalMessage = strdup(buffer);
   char *commandToken = strtok(buffer, " ");
   int commandReceive = atoi(commandToken);
   Command command;
 
-  switch (commandReceive) {
-    case ERROR:
-      commandToken = strtok(NULL, " ");
-      int errorCode = atoi(commandToken);
-      executeErrorID(errorCode);
-      break;
-    case RES_ADD:
-      commandToken = strtok(NULL, " ");
-      command.idOrigem = atoi(commandToken);
-      executeRESADD(command.idOrigem);
-      break;
-    case RES_LIST:
-      executeRESLIST();
-      break;
-    case OK:
-      executeOK();
-      break;
-    case REQ_INF:
-      commandToken = strtok(NULL, " ");
-      command.idOrigem = atoi(commandToken);
-      commandToken = strtok(NULL, " ");
-      command.idDestino = atoi(commandToken);
-      executeREQINF(threadData->serverAdress, command.idOrigem,
-                    command.idDestino);
-      break;
-    case RES_INF:
-      commandToken = strtok(NULL, " ");
-      command.idOrigem = atoi(commandToken);
-      char *payload = strtok(NULL, " ");
-      executeRESINF(command.idOrigem, payload);
-      break;
+  switch (commandReceive)
+  {
+  case ERROR:
+    commandToken = strtok(NULL, " ");
+    int errorCode = atoi(commandToken);
+    executeErrorID(errorCode);
+    break;
+  case RES_ADD:
+    commandToken = strtok(NULL, " ");
+    command.idOrigem = atoi(commandToken);
+    executeRESADD(command.idOrigem);
+    break;
+  case RES_LIST:
+    executeRESLIST();
+    break;
+  case OK:
+    executeOK();
+    break;
+  case REQ_INF:
+    commandToken = strtok(NULL, " ");
+    command.idOrigem = atoi(commandToken);
+    commandToken = strtok(NULL, " ");
+    command.idDestino = atoi(commandToken);
+    executeREQINF(threadData->serverAdress, command.idOrigem, command.idDestino, originalMessage);
+    break;
+  case RES_INF:
+    commandToken = strtok(NULL, " ");
+    command.idOrigem = atoi(commandToken);
+    strtok(NULL, " ");
+    char *payload = strtok(NULL, " ");
+    executeRESINF(command.idOrigem, payload);
+    break;
   }
 }
 
-void *ReceiveThread(void *data) {
+void *ReceiveThread(void *data)
+{
   struct ThreadArgs *threadData = (struct ThreadArgs *)data;
-  while (1) {
+  while (1)
+  {
     char buffer[MAX_MESSAGE_SIZE];
     memset(buffer, 0, sizeof(buffer));
     int byteReceived = recvfrom(clientfd, buffer, MAX_MESSAGE_SIZE, 0,
                                 (struct sockaddr *)&threadData->serverAdress,
                                 &clientAdressSize);
-    if (byteReceived < 0) {
+    if (byteReceived < 0)
+    {
       exit(EXIT_FAILURE);
     }
     buffer[byteReceived] = '\0';
@@ -252,19 +286,23 @@ void *ReceiveThread(void *data) {
   free(threadData);
   pthread_exit(NULL);
 }
-void *SendThread(void *data) {
+void *SendThread(void *data)
+{
   struct ThreadArgs *threadData = (struct ThreadArgs *)data;
-  while (1) {
+  while (1)
+  {
     char buffer[MAX_MESSAGE_SIZE];
     memset(buffer, 0, sizeof(buffer));
-    if (nonBlockRead(buffer)) {
+    if (nonBlockRead(buffer))
+    {
       executeCommand(strdup(buffer), threadData->serverAdress);
     }
   }
   free(threadData);
   pthread_exit(NULL);
 }
-int initializeClientSocket(const char *port) {
+int initializeClientSocket(const char *port)
+{
   int addressSize, clientfd, yes = 1;
   struct sockaddr *address;
   struct sockaddr_in addressv4;
@@ -276,24 +314,30 @@ int initializeClientSocket(const char *port) {
   addressSize = sizeof(addressv4);
   address = (struct sockaddr *)&addressv4;
 
-  if ((clientfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == 0) {
+  if ((clientfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == 0)
+  {
     perror("Could not create socket");
     exit(EXIT_FAILURE);
   }
   if (setsockopt(clientfd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &yes,
-                 sizeof(yes)) == -1) {
+                 sizeof(yes)) == -1)
+  {
     perror("Could not set socket option");
     exit(EXIT_FAILURE);
   }
-  if (bind(clientfd, address, addressSize) < 0) {
+  if (bind(clientfd, address, addressSize) < 0)
+  {
     perror("Could not bind port to socket");
     exit(EXIT_FAILURE);
   }
   return clientfd;
 }
 
-int main(int argc, char const *argv[]) {
-  if (argc != 3) {
+int main(int argc, char const *argv[])
+{
+  srand(time(0));
+  if (argc != 3)
+  {
     return 0;
   }
 
@@ -310,7 +354,8 @@ int main(int argc, char const *argv[]) {
       (struct ThreadArgs *)malloc(sizeof(struct ThreadArgs));
   args->serverAdress = serverAddress;
   int byteReceived = pthread_create(&receiveThread, NULL, ReceiveThread, args);
-  if (byteReceived != 0) {
+  if (byteReceived != 0)
+  {
     printf("Error creating thread\n");
     exit(EXIT_FAILURE);
   }
@@ -320,7 +365,8 @@ int main(int argc, char const *argv[]) {
   sendThreadArgs->serverAdress = serverAddress;
   int byteStatus =
       pthread_create(&sendThread, NULL, SendThread, sendThreadArgs);
-  if (byteStatus != 0) {
+  if (byteStatus != 0)
+  {
     printf("Error creating thread\n");
     exit(EXIT_FAILURE);
   }
