@@ -17,8 +17,10 @@
 #define MAX_CONECTIONS 15
 
 int sockfd;
+int broadcastfd;
 int numberThreads = 0;
 int numberEquipments = 0;
+struct sockaddr_in broadcast_addr;
 
 enum COMMAND_TYPE
 {
@@ -107,6 +109,40 @@ int initializeServerSocket(const char *port, struct sockaddr **address)
   return serverfd;
 }
 
+int initializeBroadcastServerSocket(const char *port)
+{
+  int domain, addressSize, serverfd, yes = 1;
+  struct sockaddr_in address;
+
+  address.sin_family = AF_INET;
+  address.sin_port = htons(atoi(port));
+  address.sin_addr.s_addr = htonl(INADDR_ANY);
+
+  domain = AF_INET;
+  addressSize = sizeof(address);
+  struct sockaddr *addr = (struct sockaddr *)&address;
+
+  if ((serverfd = socket(domain, SOCK_DGRAM, IPPROTO_UDP)) == 0)
+  {
+    perror("Could not create socket");
+    exit(EXIT_FAILURE);
+  }
+
+  if (setsockopt(serverfd, SOL_SOCKET, SO_REUSEADDR | SO_BROADCAST, &yes, sizeof(yes)) == -1)
+  {
+    perror("Could not set socket option");
+    exit(EXIT_FAILURE);
+  }
+
+  if (bind(serverfd, addr, addressSize) < 0)
+  {
+    perror("Could not bind port to socket");
+    exit(EXIT_FAILURE);
+  }
+
+  return serverfd;
+}
+
 int returnEmptyArrayIndex()
 {
   for (int i = 0; i < MAX_CONECTIONS; i++)
@@ -130,6 +166,13 @@ void mountRemoveResponse(char *buffer, Command command)
 {
   char aux[MAX_MESSAGE_SIZE] = "";
   sprintf(aux, "%d %d %d\n", OK, command.idOrigem, 1);
+  strcat(buffer, aux);
+}
+
+void mountRemoveBroadcast(char *buffer, Command command)
+{
+  char aux[MAX_MESSAGE_SIZE] = "";
+  sprintf(aux, "%d %d\n", REQ_REM, command.idOrigem);
   strcat(buffer, aux);
 }
 
@@ -166,6 +209,12 @@ void addEquipment(char *responseMessage, struct sockaddr_in clientAdress)
     perror("Could not send message");
     exit(EXIT_FAILURE);
   }
+  byteSent = sendto(broadcastfd, responseMessage, strlen(responseMessage), 0, (struct sockaddr *)&broadcast_addr, 16);
+  if (byteSent < 1)
+  {
+    perror("Could not send message");
+    exit(EXIT_FAILURE);
+  }
   memset(responseMessage, 0, MAX_MESSAGE_SIZE);
   mountListResponse(responseMessage);
   byteSent = sendto(sockfd, responseMessage, strlen(responseMessage), 0, (struct sockaddr *)&clientAdress, 16);
@@ -193,6 +242,14 @@ void removeEquipment(char *responseMessage, struct sockaddr_in idOriginAdress, C
       exit(EXIT_FAILURE);
     }
     printf("Equipment %d removed\n", command.idOrigem);
+    memset(responseMessage,0,MAX_MESSAGE_SIZE);
+    mountRemoveBroadcast(responseMessage, command);
+    byteSent = sendto(broadcastfd, responseMessage, strlen(responseMessage), 0, (struct sockaddr *)&broadcast_addr, 16);
+    if (byteSent < 1)
+    {
+      perror("Could not send message");
+      exit(EXIT_FAILURE);
+    }
   }
   else
   {
@@ -297,6 +354,10 @@ int main(int argc, char const *argv[])
   }
   struct sockaddr *address;
   sockfd = initializeServerSocket(argv[1], &address);
+  broadcastfd = initializeBroadcastServerSocket("0");
+  broadcast_addr.sin_family = AF_INET;
+  broadcast_addr.sin_addr.s_addr = INADDR_BROADCAST;
+  broadcast_addr.sin_port = htons(1313);
   inicializeAvaiableEquipments();
   pthread_t threads[MAX_CONECTIONS];
 
