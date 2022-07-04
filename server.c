@@ -14,7 +14,7 @@
 #include <unistd.h>
 
 #define MAX_MESSAGE_SIZE 500
-#define MAX_CONECTIONS 2
+#define MAX_CONECTIONS 15
 
 int sockfd;
 int broadcastfd;

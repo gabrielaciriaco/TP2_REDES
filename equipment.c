@@ -152,18 +152,18 @@ void executeCommand(char *command,
   }
 }
 
-int nonBlockRead(char *message)
+int asyncRead(char *message)
 {
   struct timeval tv;
   fd_set readfds;
   tv.tv_sec = 0;
-  tv.tv_usec = 50000;
+  tv.tv_usec = 60000;
   FD_ZERO(&readfds);
-  FD_SET(STDIN, &readfds);
-  select(STDIN + 1, &readfds, NULL, NULL, &tv);
-  if (FD_ISSET(STDIN, &readfds))
+  FD_SET(1, &readfds);
+  select(1 + 1, &readfds, NULL, NULL, &tv);
+  if (FD_ISSET(1, &readfds))
   {
-    read(STDIN, message, MAX_MESSAGE_SIZE - 1);
+    read(1, message, MAX_MESSAGE_SIZE - 1);
     return 1;
   }
   else
@@ -315,7 +315,7 @@ void InterpretBroadcastCommand(char *buffer)
     break;
   }
 }
-void *ReceiveThread(void *data)
+void *ReceiveMessageThread(void *data)
 {
   struct ThreadArgs *threadData = (struct ThreadArgs *)data;
   while (1)
@@ -335,7 +335,7 @@ void *ReceiveThread(void *data)
   free(threadData);
   pthread_exit(NULL);
 }
-void *ReceiveBroadcastThread(void *data)
+void *ReceiveBroadThread(void *data)
 {
   struct ThreadArgs *threadData = (struct ThreadArgs *)data;
   while (1)
@@ -362,7 +362,7 @@ void *SendThread(void *data)
   {
     char buffer[MAX_MESSAGE_SIZE];
     memset(buffer, 0, sizeof(buffer));
-    if (nonBlockRead(buffer))
+    if (asyncRead(buffer))
     {
       executeCommand(strdup(buffer), threadData->serverAdress);
     }
@@ -428,7 +428,7 @@ int main(int argc, char const *argv[])
   struct ThreadArgs *args =
       (struct ThreadArgs *)malloc(sizeof(struct ThreadArgs));
   args->serverAdress = serverAddress;
-  int byteReceived = pthread_create(&receiveThread, NULL, ReceiveThread, args);
+  int byteReceived = pthread_create(&receiveThread, NULL, ReceiveMessageThread, args);
   if (byteReceived != 0)
   {
     printf("Error creating thread\n");
@@ -449,7 +449,7 @@ int main(int argc, char const *argv[])
   struct ThreadArgs *broadcastThreadArgs =
       (struct ThreadArgs *)malloc(sizeof(struct ThreadArgs));
   broadcastThreadArgs->serverAdress = broadcastAddress;
-  int byteBroadcast = pthread_create(&broadcastThread, NULL, ReceiveBroadcastThread, args);
+  int byteBroadcast = pthread_create(&broadcastThread, NULL, ReceiveBroadThread, args);
   if (byteBroadcast != 0)
   {
     printf("Error creating thread\n");
